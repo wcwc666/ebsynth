@@ -17,14 +17,17 @@
 
 #define FOR(A,X,Y) for(int Y=0;Y<A.height();Y++) for(int X=0;X<A.width();X++)
 
+// 初始化NNF（Nearest Neighbor Field）
 A2V2i nnfInit(const V2i& sizeA,
               const V2i& sizeB,
               const int  patchWidth)
 {
-  A2V2i NNF(sizeA);
+  A2V2i NNF(sizeA); // 创建与图像A大小相同的NNF数组
+
 
   for(int xy=0;xy<NNF.numel();xy++)
   {
+    // 在范围内随机选择一个位置作为初始的NNF
     NNF[xy] = V2i(patchWidth+rand()%(sizeB(0)-2*patchWidth),
                   patchWidth+rand()%(sizeB(1)-2*patchWidth));
   }
@@ -32,29 +35,31 @@ A2V2i nnfInit(const V2i& sizeA,
   return NNF;
 }
 
+// 计算NNF的误差
 template<typename FUNC>
 A2f nnfError(const A2V2i& NNF,
              const int    patchWidth,
              FUNC         patchError)
 {
-  A2f E(size(NNF));
+  A2f E(size(NNF)); // 创建与NNF大小相同的误差数组
   
   #pragma omp parallel for schedule(static)
   for(int y=0;y<NNF.height();y++)
   for(int x=0;x<NNF.width();x++)
   {
-    E(x,y) = patchError(patchWidth,V2i(x,y),NNF(x,y),FLT_MAX);
+    E(x,y) = patchError(patchWidth,V2i(x,y),NNF(x,y),FLT_MAX); // 计算每个像素位置的误差值
   }
   
   return E;
 }
 
+// 随机初始化NNF
 static A2V2i nnfInitRandom(const V2i& targetSize,
                     const V2i& sourceSize,
                     const int  patchSize)
 {
-  A2V2i NNF(targetSize);
-  const int r = patchSize/2;
+  A2V2i NNF(targetSize); // 创建与目标图像大小相同的NNF数组
+  const int r = patchSize / 2; // 计算补丁半径
 
   for (int i = 0; i < NNF.numel(); i++)
   {
@@ -68,17 +73,18 @@ static A2V2i nnfInitRandom(const V2i& targetSize,
   return NNF;
 }
 
+// 上采样NNF
 static A2V2i nnfUpscale(const A2V2i& NNF,
                  const int    patchSize,
                  const V2i&   targetSize,
                  const V2i&   sourceSize)
 {
-  A2V2i NNF2x(targetSize);
+  A2V2i NNF2x(targetSize); // 创建2倍尺寸的NNF数组
 
   FOR(NNF2x,x,y)
   {
     NNF2x(x,y) = NNF(clamp(x/2,0,NNF.width()-1),
-                     clamp(y/2,0,NNF.height()-1))*2+V2i(x%2,y%2);
+                     clamp(y/2,0,NNF.height()-1))*2+V2i(x%2,y%2); // 通过插值从原始NNF中获取上采样后的位置
   }
 
   FOR(NNF2x,x,y)
