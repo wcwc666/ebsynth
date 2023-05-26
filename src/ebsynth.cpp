@@ -403,11 +403,14 @@ int main(int argc,char** argv)
   std::vector<unsigned char> sourceStyle(sourceWidth*sourceHeight*numStyleChannelsTotal);
   for(int xy=0;xy<sourceWidth*sourceHeight;xy++)
   {
+    // 将样式数据重新排列为连续的通道顺序
     if      (numStyleChannelsTotal>0)  { sourceStyle[xy*numStyleChannelsTotal+0] = sourceStyleData[xy*4+0]; }
     if      (numStyleChannelsTotal==2) { sourceStyle[xy*numStyleChannelsTotal+1] = sourceStyleData[xy*4+3]; }           
     else if (numStyleChannelsTotal>1)  { sourceStyle[xy*numStyleChannelsTotal+1] = sourceStyleData[xy*4+1]; }
     if      (numStyleChannelsTotal>2)  { sourceStyle[xy*numStyleChannelsTotal+2] = sourceStyleData[xy*4+2]; }
-    if      (numStyleChannelsTotal>3)  { sourceStyle[xy*numStyleChannelsTotal+3] = sourceStyleData[xy*4+3]; }                 
+    if      (numStyleChannelsTotal>3)  { sourceStyle[xy*numStyleChannelsTotal+3] = sourceStyleData[xy*4+3]; }
+    printf("%d",xy);
+                     
   }
   
   int targetWidth = 0;
@@ -418,19 +421,24 @@ int main(int argc,char** argv)
   {
     Guide& guide = guides[i];
 
+    // 加载引导图像的数据
     guide.sourceData = tryLoad(guide.sourceFileName,&guide.sourceWidth,&guide.sourceHeight);
     guide.targetData = tryLoad(guide.targetFileName,&guide.targetWidth,&guide.targetHeight);
       
+    // 检查引导图像的分辨率是否与样式图像相匹配
     if              (guide.sourceWidth!=sourceWidth || guide.sourceHeight!=sourceHeight)  { printf("error: source guide '%s' doesn't match the resolution of '%s'\n",guide.sourceFileName.c_str(),styleFileName.c_str()); return 1; }      
+    // 检查引导图像的分辨率是否与第一个引导图像相匹配
     if      (i>0 && (guide.targetWidth!=targetWidth || guide.targetHeight!=targetHeight)) { printf("error: target guide '%s' doesn't match the resolution of '%s'\n",guide.targetFileName.c_str(),guides[0].targetFileName.c_str()); return 1; }
     else if (i==0) { targetWidth = guide.targetWidth; targetHeight = guide.targetHeight; }
 
+    // 计算引导图像的通道数，并更新总的引导通道数
     guide.numChannels = std::max(evalNumChannels(guide.sourceData,sourceWidth*sourceHeight),
                                  evalNumChannels(guide.targetData,targetWidth*targetHeight));    
   
     numGuideChannelsTotal += guide.numChannels;
   }
   
+  // 检查样式通道数和引导通道数是否超过限制
   if (numStyleChannelsTotal>EBSYNTH_MAX_STYLE_CHANNELS) { printf("error: too many style channels (%d), maximum number is %d\n",numStyleChannelsTotal,EBSYNTH_MAX_STYLE_CHANNELS); return 1; }
   if (numGuideChannelsTotal>EBSYNTH_MAX_GUIDE_CHANNELS) { printf("error: too many guide channels (%d), maximum number is %d\n",numGuideChannelsTotal,EBSYNTH_MAX_GUIDE_CHANNELS); return 1; }
 
@@ -442,6 +450,7 @@ int main(int argc,char** argv)
     { 
       const int numChannels = guides[i].numChannels;  
 
+      // 将引导图像数据重新排列为连续的通道顺序
       if      (numChannels>0)  { sourceGuides[xy*numGuideChannelsTotal+c+0] = guides[i].sourceData[xy*4+0]; }
       if      (numChannels==2) { sourceGuides[xy*numGuideChannelsTotal+c+1] = guides[i].sourceData[xy*4+3]; }           
       else if (numChannels>1)  { sourceGuides[xy*numGuideChannelsTotal+c+1] = guides[i].sourceData[xy*4+1]; }
@@ -459,7 +468,7 @@ int main(int argc,char** argv)
     for(int i=0;i<numGuides;i++)
     { 
       const int numChannels = guides[i].numChannels;  
-
+      // 将引导图像数据重新排列为连续的通道顺序
       if      (numChannels>0)  { targetGuides[xy*numGuideChannelsTotal+c+0] = guides[i].targetData[xy*4+0]; }
       if      (numChannels==2) { targetGuides[xy*numGuideChannelsTotal+c+1] = guides[i].targetData[xy*4+3]; }           
       else if (numChannels>1)  { targetGuides[xy*numGuideChannelsTotal+c+1] = guides[i].targetData[xy*4+1]; }
@@ -471,11 +480,13 @@ int main(int argc,char** argv)
   }
 
   std::vector<float> styleWeights(numStyleChannelsTotal);
+  // 创建样式权重向量，长度为样式通道数
   if (styleWeight<0) { styleWeight = 1.0f; }
   for(int i=0;i<numStyleChannelsTotal;i++) { styleWeights[i] = styleWeight / float(numStyleChannelsTotal); }
-
+  // 检查并设置引导图像的权重
   for(int i=0;i<numGuides;i++) { if (guides[i].weight<0) { guides[i].weight = 1.0f/float(numGuides); } }
 
+  // 创建引导权重向量，长度为总引导通道数
   std::vector<float> guideWeights(numGuideChannelsTotal);
   {
     int c = 0;
@@ -483,6 +494,7 @@ int main(int argc,char** argv)
     { 
       const int numChannels = guides[i].numChannels;  
       
+      // 将引导图像的权重均分到各个通道
       for(int j=0;j<numChannels;j++)
       {
         guideWeights[c+j] = guides[i].weight / float(numChannels);
@@ -493,6 +505,7 @@ int main(int argc,char** argv)
   }
 
   int maxPyramidLevels = 0;
+  // 计算金字塔的最大级别
   for(int level=32;level>=0;level--)
   {
     if (min(pyramidLevelSize(std::min(V2i(sourceWidth,sourceHeight),V2i(targetWidth,targetHeight)),level)) >= (2*patchSize+1))
@@ -508,6 +521,7 @@ int main(int argc,char** argv)
   std::vector<int> numSearchVoteItersPerLevel(numPyramidLevels);
   std::vector<int> numPatchMatchItersPerLevel(numPyramidLevels);
   std::vector<int> stopThresholdPerLevel(numPyramidLevels);
+  // 设置金字塔各级别的搜索和迭代次数
   for(int i=0;i<numPyramidLevels;i++)
   {
     numSearchVoteItersPerLevel[i] = numSearchVoteIters;
@@ -526,6 +540,7 @@ int main(int argc,char** argv)
   printf("extrapass3x3: %s\n",extraPass3x3!=0?"yes":"no");
   printf("backend: %s\n",backendToString(backend).c_str());
 
+  // 调用 ebsynthRun 函数进行风格迁移
   ebsynthRun(backend,
              numStyleChannelsTotal,
              numGuideChannelsTotal,
@@ -550,10 +565,12 @@ int main(int argc,char** argv)
              NULL,
              output.data());
 
+  // 将输出结果写入 PNG 文件
   stbi_write_png(outputFileName.c_str(),targetWidth,targetHeight,numStyleChannelsTotal,output.data(),numStyleChannelsTotal*targetWidth);
 
   printf("result was written to %s\n",outputFileName.c_str());
 
+  // 释放资源
   stbi_image_free(sourceStyleData);
 
   for(int i=0;i<numGuides;i++)
@@ -564,3 +581,29 @@ int main(int argc,char** argv)
   
   return 0;
 }
+
+
+
+
+
+// #include <pybind11/pybind11.h>
+// #include <<pybind11/cstdio>
+// #include <<pybind11/cmath>
+// PYBIND11_MODULE(ebsynth, m){
+//     m.doc() = "ebsynth";
+//     // 封装函数
+//     m.def("inner_product", &inner_product);
+//     m.def("sum", &sum);
+    
+//     // 封装用lambda表达式表示的函数
+//     // 以下函数用于输出指定字符串
+//     m.def("print", [](std::string& str){
+//         std::cout << str << std::endl;      
+//     }); 
+
+//     // 封装类
+//     pybind11::class_<Vector>(m, "Vector")
+//             .def(pybind11::init())
+//             .def("inner_product", &Vector::inner_product)
+//             .def("sum", &Vector::sum);
+// }
